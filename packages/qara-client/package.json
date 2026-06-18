@@ -1,0 +1,16 @@
+{
+  "name": "@qara/client",
+  "version": "0.1.0",
+  "description": "TypeScript client for QARA API",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

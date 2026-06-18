@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: QARA Documentation
+    url: https://github.com/qara/qara/tree/main/docs
+    about: Check the docs first
+  - name: QARA Discussions
+    url: https://github.com/qara/qara/discussions
+    about: Ask questions and discuss ideas

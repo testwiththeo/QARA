@@ -3,32 +3,54 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 dist/
-build/
 .venv/
-venv/
+*.egg
+.pytest_cache/
+.coverage
+coverage.xml
+**/.mypy_cache/
 
 # Node
 node_modules/
-.next/
+frontend/dist/
+capture/extension/dist/
+capture/cli/dist/
+*.tsbuildinfo
 
 # Environment
 .env
-!.env.example
+.env.local
+.venv/
 
 # IDE
-.vscode/
+.vscode/settings.json
+.vscode/launch.json
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Docker volumes
-pgdata/
-minio_data/
+# Docker
+docker-data/
 
-# Extension build
-extension/dist/
+# MinIO
+infra/docker/minio-data/
 
-# CLI build
-cli/dist/
+# Migration
+api/alembic/versions/*.pyc
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Build
+*.tar.gz
+*.tgz

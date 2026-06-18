@@ -1,0 +1,77 @@
+{
+  "combo": {
+    "name": "QARA - Qoder 10x + OpenCode Fallback",
+    "description": "10 akun Qoder via Round Robin, fallback ke OpenCode Free",
+    "strategy": "round-robin",
+    "sticky_round_robin_limit": 1,
+    "fallback_strategy": "round-robin",
+    "models": [
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 1",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 2",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 3",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 4",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 5",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 6",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 7",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 8",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 9",
+        "weight": 1
+      },
+      {
+        "provider": "qoder",
+        "model": "qmodel-latest",
+        "label": "Qoder akun 10",
+        "weight": 1
+      },
+      {
+        "provider": "opencode-free",
+        "model": "free",
+        "label": "OpenCode Free (fallback)",
+        "weight": 0
+      }
+    ]
+  }
+}
