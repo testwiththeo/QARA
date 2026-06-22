@@ -32,8 +32,22 @@ async def triage_bug(ctx: dict, bug_id: str) -> None:
     from app.llm.client import LLMClient
     from app.llm.prompts import TRIAGE_SYSTEM_PROMPT, TRIAGE_USER_TEMPLATE
     from app.llm.embeddings import get_embedding
-    from sqlalchemy import select, text
+    from sqlalchemy import select, text, cast
+    from sqlalchemy.types import UserDefinedType
     from datetime import datetime, timezone
+
+    class Vector(UserDefinedType):
+        """pgvector type for SQLAlchemy."""
+        def get_col_spec(self):
+            return "VECTOR"
+        def bind_processor(self, dialect):
+            def process(value):
+                if isinstance(value, list):
+                    return "[" + ",".join(str(v) for v in value) + "]"
+                return value
+            return process
+        def bind_expression(self, bindvalue):
+            return cast(bindvalue, Vector())
 
     async with async_session_factory() as db:
         # 1. Load bug + captures
@@ -83,83 +97,88 @@ async def triage_bug(ctx: dict, bug_id: str) -> None:
             console_errors=console_errors,
         )
 
-        # 3. Call LLM
+        # 3. Call LLM (savepoint so failure doesn't poison transaction)
         try:
-            client = LLMClient()
-            raw = await client.chat_completion(
-                messages=[
-                    {"role": "system", "content": TRIAGE_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
-                ],
-                temperature=0.2,
-                response_format={"type": "json_object"},
-            )
-            triage = json.loads(raw)
+            async with db.begin_nested():
+                client = LLMClient()
+                raw = await client.chat_completion(
+                    messages=[
+                        {"role": "system", "content": TRIAGE_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_content},
+                    ],
+                    temperature=0.2,
+                    response_format={"type": "json_object"},
+                )
+                triage = json.loads(raw)
 
-            # 4. Update bug
-            if "severity" in triage:
-                bug.severity = triage["severity"]
-            if "component" in triage:
-                bug.component = triage["component"]
-            if "risk_score" in triage:
-                try:
-                    bug.risk_score = Decimal(str(triage["risk_score"]))
-                except Exception:
-                    pass
-            bug.updated_at = datetime.now(timezone.utc)
-            await db.flush()
+                if "severity" in triage:
+                    bug.severity = triage["severity"]
+                if "component" in triage:
+                    bug.component = triage["component"]
+                if "risk_score" in triage:
+                    try:
+                        bug.risk_score = Decimal(str(triage["risk_score"]))
+                    except Exception:
+                        pass
+                bug.updated_at = datetime.now(timezone.utc)
+                await db.flush()
         except Exception as e:
             logger.warning("LLM triage failed for bug %s: %s", bug_id, e)
 
         # 5. Generate embedding
+        embedding = None
         embed_text = f"{bug.title} {bug.description or ''}"
         try:
             embedding = await get_embedding(embed_text)
-
-            # 6. Store embedding
-            await db.execute(
-                text(
-                    """
-                    INSERT INTO bug_embeddings (id, bug_report_id, embedding, created_at)
-                    VALUES (gen_random_uuid(), :bug_id, :embedding::vector, NOW())
-                    ON CONFLICT (bug_report_id) DO UPDATE SET embedding = EXCLUDED.embedding
-                    """
-                ),
-                {
-                    "bug_id": str(bug.id),
-                    "embedding": str(embedding),
-                },
-            )
-            await db.flush()
         except Exception as e:
-            logger.warning("Embedding failed for bug %s: %s", bug_id, e)
+            logger.warning("Embedding generation failed for bug %s: %s", bug_id, e)
 
-        # 7. Cosine similarity search for duplicates
-        try:
-            sim_result = await db.execute(
-                text(
-                    """
-                    SELECT be.bug_report_id, br.title, br.severity, br.status,
-                           1 - (be.embedding <=> :embedding::vector) AS similarity
-                    FROM bug_embeddings be
-                    JOIN bug_reports br ON br.id = be.bug_report_id
-                    WHERE be.bug_report_id != :bug_id
-                      AND 1 - (be.embedding <=> :embedding::vector) > 0.85
-                    ORDER BY be.embedding <=> :embedding::vector
-                    LIMIT 1
-                    """
-                ),
-                {
-                    "bug_id": str(bug.id),
-                    "embedding": str(embedding),
-                },
-            )
-            duplicate = sim_result.first()
-            if duplicate:
-                bug.duplicate_of = uuid.UUID(str(duplicate[0]))
-                await db.flush()
-        except Exception as e:
-            logger.warning("Similarity search failed for bug %s: %s", bug_id, e)
+        if embedding is not None:
+            vec_str = "[" + ",".join(str(v) for v in embedding) + "]"
+
+            # Store embedding (savepoint to protect transaction)
+            try:
+                async with db.begin_nested():
+                    await db.execute(
+                        text(
+                            """
+                            INSERT INTO bug_embeddings (id, bug_report_id, embedding, created_at)
+                            VALUES (gen_random_uuid(), :bug_id, cast(:vec as vector), NOW())
+                            ON CONFLICT (bug_report_id) DO UPDATE SET embedding = EXCLUDED.embedding
+                            """
+                        ),
+                        {"bug_id": str(bug.id), "vec": vec_str},
+                    )
+                    await db.flush()
+                    logger.info("Stored embedding for bug %s", bug_id)
+            except Exception as e:
+                logger.warning("Embedding storage failed for bug %s: %s", bug_id, e)
+
+            # Cosine similarity search for duplicates
+            try:
+                async with db.begin_nested():
+                    sim_result = await db.execute(
+                        text(
+                            """
+                            SELECT be.bug_report_id, br.title, br.severity, br.status,
+                                   1 - (be.embedding <=> cast(:vec as vector)) AS similarity
+                            FROM bug_embeddings be
+                            JOIN bug_reports br ON br.id = be.bug_report_id
+                            WHERE be.bug_report_id != :bug_id
+                              AND 1 - (be.embedding <=> cast(:vec as vector)) > 0.85
+                            ORDER BY be.embedding <=> cast(:vec as vector)
+                            LIMIT 1
+                            """
+                        ),
+                        {"bug_id": str(bug.id), "vec": vec_str},
+                    )
+                    duplicate = sim_result.first()
+                    if duplicate:
+                        bug.duplicate_of = uuid.UUID(str(duplicate[0]))
+                        logger.info("Found duplicate for bug %s: %s", bug_id, duplicate[0])
+                        await db.flush()
+            except Exception as e:
+                logger.warning("Similarity search failed for bug %s: %s", bug_id, e)
 
         # Update status to triaged
         if bug.status == "triaging":
@@ -168,6 +187,8 @@ async def triage_bug(ctx: dict, bug_id: str) -> None:
             await db.flush()
 
         await db.commit()
+        logger.info("Triage complete for bug %s: severity=%s, component=%s",
+                     bug_id, bug.severity, bug.component)
 
         # 8. Enqueue integrations if configured
         try:
