@@ -51,6 +51,14 @@ logs/
 *.db
 *.sqlite3
 
+# Kilo agent workspace
+.kilo/
+
+# Reference docs (not part of repo)
+architect-prompt.md
+phase-1-plan.md
+docs/
+
 # Build
 *.tar.gz
 *.tgz
