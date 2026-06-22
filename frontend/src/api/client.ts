@@ -238,7 +238,7 @@ export async function updateBug(id: string, data: BugUpdateRequest): Promise<Bug
 export async function getSimilarBugs(
   bugId: string,
   params?: SimilarBugParams
-): Promise<{ items: SimilarBug[] }> {
+): Promise<SimilarBug[]> {
   const searchParams = new URLSearchParams();
   if (params?.limit) searchParams.set("limit", String(params.limit));
   if (params?.threshold) searchParams.set("threshold", String(params.threshold));
@@ -260,7 +260,7 @@ export async function uploadCapture(data: CaptureUploadRequest): Promise<BugCapt
   });
 }
 
-export async function getCapturesForBug(bugId: string): Promise<{ items: BugCapture[] }> {
+export async function getCapturesForBug(bugId: string): Promise<BugCapture[]> {
   return request(`/captures/bug/${bugId}`);
 }
 
